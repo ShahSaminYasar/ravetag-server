@@ -37,15 +37,19 @@ async function run() {
 
     // ========== MongoDB Collections ==========
     const productsCollection = client.db("ravetag").collection("products");
+    const categoriesCollection = client.db("ravetag").collection("categories");
 
     //========== APIs ==========
     // Get Product/s
     app.get("/api/v1/products", async (req, res) => {
       try {
-        const { id } = req.query;
+        const { id, category } = req.query;
         const filter = {};
         if (id) {
           filter._id = ObjectId.createFromHexString(id);
+        }
+        if (category) {
+          filter.category = category;
         }
         const result = await productsCollection.find(filter).toArray();
         res.send(result);
@@ -65,6 +69,17 @@ async function run() {
         return res.send({ result: price });
       } else {
         return res.status(404).send({ message: "not_found" });
+      }
+    });
+
+    // Get Categories
+    app.get("/api/v1/categories", async (req, res) => {
+      try {
+        const result = await categoriesCollection.find().toArray();
+        const categories = result?.[0]?.categories;
+        return res.send({ result: categories });
+      } catch (error) {
+        return res.status(404).send({ message: "error", error });
       }
     });
   } finally {
