@@ -4,6 +4,9 @@ const cors = require("cors");
 require("dotenv").config();
 const app = express();
 const port = process.env.PORT || 5000;
+const textlink = require("textlink-sms");
+
+textlink.useKey(process.env.TEXTLINK_API_KEY);
 
 //========== Middlewares ==========
 app.use(
@@ -38,20 +41,34 @@ async function run() {
     // ========== MongoDB Collections ==========
     const productsCollection = client.db("ravetag").collection("products");
     const categoriesCollection = client.db("ravetag").collection("categories");
+    const customersCollection = client.db("ravetag").collection("customers");
+    const ordersCollection = client.db("ravetag").collection("orders");
 
     //========== APIs ==========
     // Get Product/s
     app.get("/api/v1/products", async (req, res) => {
       try {
-        const { id, category } = req.query;
+        const { id, category, top_sales } = req.query;
         const filter = {};
+        // if (id && id == "null") {
+        //   console.log("Null id");
+        //   return res.send({ result: [] });
+        // }
         if (id) {
           filter._id = ObjectId.createFromHexString(id);
         }
         if (category) {
           filter.category = category;
         }
-        const result = await productsCollection.find(filter).toArray();
+        let result;
+        if (top_sales) {
+          result = await productsCollection
+            .find(filter)
+            .sort({ sales: -1 })
+            .toArray();
+        } else {
+          result = await productsCollection.find(filter).toArray();
+        }
         res.send(result);
       } catch (error) {
         return res.status(400).send({ message: "error", error });
@@ -79,6 +96,115 @@ async function run() {
         const categories = result?.[0]?.categories;
         return res.send({ result: categories });
       } catch (error) {
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Place order
+    app.post("/api/v1/place-order", async (req, res) => {
+      try {
+        const { order_details } = req.body;
+        const result = await ordersCollection.insertOne(order_details);
+        const updateCustomer = await customersCollection.replaceOne(
+          { phone: order_details?.customer?.phone },
+          order_details?.customer,
+          { upsert: true }
+        );
+        if (result?.insertedId) {
+          return res.send({ message: "success", id: result?.insertedId });
+        } else {
+          return res.send({
+            message: "Failed to place order, please try again.",
+          });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    app.get("/api/v1/otp", async (req, res) => {
+      try {
+        const { phone } = req.query;
+        const phone_number = `+${phone}`;
+
+        console.log(phone_number);
+
+        const sendCode = await textlink.sendVerificationSMS(phone_number, {
+          service_name: "RaveTag",
+          expiration_time: 10 * 60 * 1000,
+          source_country: "BD",
+        });
+
+        console.log(sendCode);
+
+        if (sendCode?.ok) {
+          return res.status(200).send({ status_code: 200, message: "success" });
+        } else {
+          return res
+            .status(200)
+            .send({ status_code: 400, message: sendCode?.message });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    app.get("/api/v1/verify-phone", async (req, res) => {
+      try {
+        const { phone, otp } = req.query;
+        // const result = await textflow.verifyCode(`+${phone}`, otp);
+        console.log("=>", `+${phone}`, otp);
+        const result = await textlink.verifyCode(`+${phone}`, otp);
+
+        // return res.status(result?.status).send({
+        //   valid: result?.valid,
+        //   status_code: result?.status,
+        //   message: result?.message,
+        //   valid_code: result?.valid_code,
+        // });
+
+        console.log(result);
+        if (result?.ok) {
+          return res.status(200).send({
+            valid: true,
+            status_code: 200,
+            message: "verified",
+          });
+        } else {
+          return res.status(200).send({
+            valid: false,
+            status_code: 400,
+            message: result?.message || "invalid",
+          });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    app.post("/api/v1/customer", async (req, res) => {
+      try {
+        const { customerData } = req.body;
+        const result = await customersCollection.replaceOne(
+          { phone: customerData?.phone },
+          customerData,
+          { upsert: true }
+        );
+        console.log(result);
+        if (
+          result?.upsertedId ||
+          result?.modifiedCount > 0 ||
+          result?.upsertedCount > 0
+        ) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "Failed to update data" });
+        }
+      } catch (error) {
+        console.log(error);
         return res.status(404).send({ message: "error", error });
       }
     });
