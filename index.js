@@ -105,6 +105,38 @@ async function run() {
       try {
         const { order_details } = req.body;
         const result = await ordersCollection.insertOne(order_details);
+
+        order_details?.order?.map((item) => {
+          let productId = item?.id || item?._id;
+          let selectedVariant = item?.color;
+          let selectedSize = item?.size;
+          const productObjectId = ObjectId.createFromHexString(productId);
+
+          const updateStock = async () => {
+            const result = await productsCollection.updateOne(
+              {
+                _id: productObjectId,
+                "variants.name": selectedVariant,
+                "variants.sizes.size": selectedSize,
+              },
+              {
+                $inc: {
+                  "variants.$[variant].sizes.$[size].stock": -item?.quantity,
+                },
+              },
+              {
+                arrayFilters: [
+                  { "variant.name": selectedVariant },
+                  { "size.size": selectedSize },
+                ],
+              }
+            );
+            console.log(result);
+          };
+
+          updateStock();
+        });
+
         const updateCustomer = await customersCollection.replaceOne(
           { phone: order_details?.customer?.phone },
           order_details?.customer,
@@ -123,12 +155,39 @@ async function run() {
       }
     });
 
+    // Cancel order
+    app.post("/api/v1/cancel-order", async (req, res) => {
+      try {
+        const { c_id } = req.body;
+        const result = await ordersCollection.updateOne(
+          { c_id: c_id },
+          {
+            $set: {
+              status: "cancelled",
+            },
+          }
+        );
+
+        if (result?.modifiedCount > 0) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({
+            message: "Failed to cancel order, please try again.",
+          });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Send OTP
     app.get("/api/v1/otp", async (req, res) => {
       try {
         const { phone } = req.query;
         const phone_number = `+${phone}`;
 
-        console.log(phone_number);
+        // console.log(phone_number);
 
         const sendCode = await textlink.sendVerificationSMS(phone_number, {
           service_name: "RaveTag",
@@ -136,7 +195,7 @@ async function run() {
           source_country: "BD",
         });
 
-        console.log(sendCode);
+        // console.log(sendCode);
 
         if (sendCode?.ok) {
           return res.status(200).send({ status_code: 200, message: "success" });
@@ -151,11 +210,12 @@ async function run() {
       }
     });
 
+    // Verify OTP
     app.get("/api/v1/verify-phone", async (req, res) => {
       try {
         const { phone, otp } = req.query;
         // const result = await textflow.verifyCode(`+${phone}`, otp);
-        console.log("=>", `+${phone}`, otp);
+        // console.log("=>", `+${phone}`, otp);
         const result = await textlink.verifyCode(`+${phone}`, otp);
 
         // return res.status(result?.status).send({
@@ -165,7 +225,7 @@ async function run() {
         //   valid_code: result?.valid_code,
         // });
 
-        console.log(result);
+        // console.log(result);
         if (result?.ok) {
           return res.status(200).send({
             valid: true,
@@ -185,6 +245,7 @@ async function run() {
       }
     });
 
+    // Update Customer
     app.post("/api/v1/customer", async (req, res) => {
       try {
         const { customerData } = req.body;
@@ -203,6 +264,34 @@ async function run() {
         } else {
           return res.send({ message: "Failed to update data" });
         }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Get Orders
+    app.get("/api/v1/orders", async (req, res) => {
+      try {
+        const { phone, pending, processing, delivered, cancelled } = req?.query;
+
+        let filter = {};
+
+        if (phone) {
+          filter["customer.phone"] = `+${phone}`;
+        }
+        if (pending) {
+          filter.status = "pending";
+        } else if (processing) {
+          filter.status = "processing";
+        } else if (delivered) {
+          filter.status = "delivered";
+        } else if (cancelled) {
+          filter.status = "cancelled";
+        }
+
+        const result = await ordersCollection.find(filter).toArray();
+        return res.send({ result });
       } catch (error) {
         console.log(error);
         return res.status(404).send({ message: "error", error });
