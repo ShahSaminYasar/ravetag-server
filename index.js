@@ -69,7 +69,7 @@ async function run() {
         } else {
           result = await productsCollection.find(filter).toArray();
         }
-        res.send(result);
+        return res.send(result);
       } catch (error) {
         return res.status(400).send({ message: "error", error });
       }
