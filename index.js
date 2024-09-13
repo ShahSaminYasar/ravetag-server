@@ -11,7 +11,7 @@ textlink.useKey(process.env.TEXTLINK_API_KEY);
 //========== Middlewares ==========
 app.use(
   cors({
-    origin: ["http://localhost:5173"],
+    origin: ["https://ravetag-76898.web.app", "http://localhost:5173"],
     credentials: true,
   })
 );
