@@ -182,6 +182,33 @@ async function run() {
       }
     });
 
+    // Change Order Status
+    app.put("/api/v1/change-order-status", async (req, res) => {
+      try {
+        const { id, status } = req.body;
+
+        const result = await ordersCollection.updateOne(
+          { _id: ObjectId.createFromHexString(id) },
+          {
+            $set: {
+              status: status,
+            },
+          }
+        );
+
+        if (result?.modifiedCount > 0) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "failed to update status" });
+        }
+      } catch (error) {
+        console.log(error);
+        return res
+          .status(404)
+          .send({ message: error?.message || "error", error });
+      }
+    });
+
     // Send OTP
     app.get("/api/v1/otp", async (req, res) => {
       try {
