@@ -298,6 +298,43 @@ async function run() {
         return res.status(404).send({ message: "error", error });
       }
     });
+
+    // Post Product
+    app.post("/api/v1/products", async (req, res) => {
+      try {
+        const { data } = req.body;
+        const result = await productsCollection.insertOne(data);
+
+        if (result?.insertedId) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "failed to upload product" });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Update Product
+    app.put("/api/v1/products", async (req, res) => {
+      try {
+        const { data } = req.body;
+        const result = await productsCollection.replaceOne(
+          { _id: ObjectId.createFromHexString },
+          data
+        );
+
+        if (result?.modifiedCount > 0) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "failed to update product" });
+        }
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
