@@ -76,6 +76,26 @@ async function run() {
       }
     });
 
+    app.delete("/api/v1/products", async (req, res) => {
+      try {
+        const { id } = req.query;
+
+        const result = await productsCollection.deleteOne({
+          _id: ObjectId.createFromHexString(id),
+        });
+
+        if (result?.deletedCount > 0) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "failed to delete product" });
+        }
+      } catch (error) {
+        return res
+          .status(400)
+          .send({ message: error?.message || "error", error });
+      }
+    });
+
     // Get Product Price
     app.get("/api/v1/product-price", async (req, res) => {
       const { id } = req.query;
