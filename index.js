@@ -45,6 +45,21 @@ async function run() {
     const customersCollection = client.db("ravetag").collection("customers");
     const ordersCollection = client.db("ravetag").collection("orders");
 
+    // ========== Middlewares ==========
+    const admin_auth = async (req, res, next) => {
+      try {
+        const token = req.body.token || req.query.token;
+        // console.log(token);
+        if (token && token === process.env.ADMIN_TOKEN) {
+          next();
+        } else {
+          return res.status(401).send({ message: "UNAUTHORIZED" });
+        }
+      } catch (error) {
+        return res.status(403).send({ message: "AUTHORIZATION ERROR" });
+      }
+    };
+
     //========== APIs ==========
     // Get Product/s
     app.get("/api/v1/products", async (req, res) => {
@@ -76,26 +91,6 @@ async function run() {
       }
     });
 
-    app.delete("/api/v1/products", async (req, res) => {
-      try {
-        const { id } = req.query;
-
-        const result = await productsCollection.deleteOne({
-          _id: ObjectId.createFromHexString(id),
-        });
-
-        if (result?.deletedCount > 0) {
-          return res.send({ message: "success" });
-        } else {
-          return res.send({ message: "failed to delete product" });
-        }
-      } catch (error) {
-        return res
-          .status(400)
-          .send({ message: error?.message || "error", error });
-      }
-    });
-
     // Get Product Price
     app.get("/api/v1/product-price", async (req, res) => {
       const { id } = req.query;
@@ -106,7 +101,7 @@ async function run() {
         const price = product?.offer_price;
         return res.send({ result: price });
       } else {
-        return res.status(404).send({ message: "not_found" });
+        return res.send({ message: "not_found", result: 0 });
       }
     });
 
@@ -203,7 +198,7 @@ async function run() {
     });
 
     // Change Order Status
-    app.put("/api/v1/change-order-status", async (req, res) => {
+    app.put("/api/v1/change-order-status", admin_auth, async (req, res) => {
       try {
         const { id, status } = req.body;
 
@@ -302,7 +297,7 @@ async function run() {
           customerData,
           { upsert: true }
         );
-        console.log(result);
+        // console.log(result);
         if (
           result?.upsertedId ||
           result?.modifiedCount > 0 ||
@@ -320,6 +315,36 @@ async function run() {
 
     // Get Orders
     app.get("/api/v1/orders", async (req, res) => {
+      try {
+        const { phone, pending, processing, delivered, cancelled } = req?.query;
+
+        let filter = {};
+
+        if (phone) {
+          filter["customer.phone"] = `+${phone}`;
+        } else {
+          return res.status(403).send({ message: "FORBIDDEN", result: [] });
+        }
+        if (pending) {
+          filter.status = "pending";
+        } else if (processing) {
+          filter.status = "processing";
+        } else if (delivered) {
+          filter.status = "delivered";
+        } else if (cancelled) {
+          filter.status = "cancelled";
+        }
+
+        const result = await ordersCollection.find(filter).toArray();
+        return res.send({ result });
+      } catch (error) {
+        console.log(error);
+        return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Get Orders (Admin)
+    app.get("/api/v1/admin-orders", admin_auth, async (req, res) => {
       try {
         const { phone, pending, processing, delivered, cancelled } = req?.query;
 
@@ -347,7 +372,7 @@ async function run() {
     });
 
     // Post Product
-    app.post("/api/v1/products", async (req, res) => {
+    app.post("/api/v1/products", admin_auth, async (req, res) => {
       try {
         const { data } = req.body;
         const result = await productsCollection.insertOne(data);
@@ -364,11 +389,12 @@ async function run() {
     });
 
     // Update Product
-    app.put("/api/v1/products", async (req, res) => {
+    app.put("/api/v1/products", admin_auth, async (req, res) => {
       try {
-        const { data } = req.body;
+        const { data, id } = req.body;
+        // console.log(JSON.stringify(data));
         const result = await productsCollection.replaceOne(
-          { _id: ObjectId.createFromHexString },
+          { _id: ObjectId.createFromHexString(id) },
           data
         );
 
@@ -380,6 +406,27 @@ async function run() {
       } catch (error) {
         console.log(error);
         return res.status(404).send({ message: "error", error });
+      }
+    });
+
+    // Delete Product
+    app.delete("/api/v1/products", admin_auth, async (req, res) => {
+      try {
+        const { id } = req.query;
+
+        const result = await productsCollection.deleteOne({
+          _id: ObjectId.createFromHexString(id),
+        });
+
+        if (result?.deletedCount > 0) {
+          return res.send({ message: "success" });
+        } else {
+          return res.send({ message: "failed to delete product" });
+        }
+      } catch (error) {
+        return res
+          .status(400)
+          .send({ message: error?.message || "error", error });
       }
     });
   } finally {
