@@ -8,7 +8,11 @@ const textlink = require("textlink-sms");
 //========== Middlewares ==========
 app.use(
   cors({
-    origin: ["https://ravetag-76898.web.app", "http://localhost:5173"],
+    origin: [
+      "https://ravetagbd.web.app",
+      "https://ravetag-76898.web.app",
+      "http://localhost:5173",
+    ],
     credentials: true,
   })
 );
@@ -44,6 +48,9 @@ async function run() {
     const categoriesCollection = client.db("ravetag").collection("categories");
     const customersCollection = client.db("ravetag").collection("customers");
     const ordersCollection = client.db("ravetag").collection("orders");
+    const externalLinkVisitsCollection = client
+      .db("ravetag")
+      .collection("external_link_visits");
 
     // ========== Middlewares ==========
     const admin_auth = async (req, res, next) => {
@@ -424,6 +431,37 @@ async function run() {
           return res.send({ message: "failed to delete product" });
         }
       } catch (error) {
+        return res
+          .status(400)
+          .send({ message: error?.message || "error", error });
+      }
+    });
+
+    app.put("/api/v1/external-link-visit", async (req, res) => {
+      try {
+        const { user, datetime, name } = req.body;
+
+        const doc = await externalLinkVisitsCollection.findOne({ name: name });
+
+        const newEntry = { user, datetime };
+
+        doc.visits.push(newEntry);
+
+        const result = await externalLinkVisitsCollection.replaceOne(
+          {
+            name: name,
+          },
+          { name: doc.name, link: doc.link, visits: doc.visits }
+        );
+
+        // console.log(
+        //   { name: doc.name, link: doc.link, visits: doc.visits },
+        //   result
+        // );
+
+        return res.send({ message: "success" });
+      } catch (error) {
+        console.log(error);
         return res
           .status(400)
           .send({ message: error?.message || "error", error });
