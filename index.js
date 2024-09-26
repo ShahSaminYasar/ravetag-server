@@ -60,7 +60,6 @@ async function run() {
         if (token && token === process.env.ADMIN_TOKEN) {
           next();
         } else {
-          console.log(token, process.env.ADMIN_TOKEN);
           return res.status(401).send({ message: "UNAUTHORIZED" });
         }
       } catch (error) {
